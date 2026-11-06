@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { supabase } from './src/supabase';
+import { supabase } from './lib/supabase';
 
 export default function App() {
   const [page, setPage] = useState('Accueil');
