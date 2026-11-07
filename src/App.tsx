@@ -47,6 +47,44 @@ const [authPhone, setAuthPhone] = useState("");
   });
 
   const menu: Page[] = [
+    async function handleAuth(e: React.FormEvent<HTMLFormElement>) {
+  e.preventDefault();
+  setMessage("");
+
+  if (authMode === "register") {
+    const { error } = await supabase.auth.signUp({
+      email: authEmail,
+      password: authPassword,
+      options: {
+        data: {
+          full_name: authName,
+          phone: authPhone
+        }
+      }
+    });
+
+    if (error) {
+      setMessage("Erreur d'inscription : " + error.message);
+      return;
+    }
+
+    setMessage("Inscription réussie. Vérifiez votre e-mail si une confirmation est demandée.");
+  } else {
+    const { error } = await supabase.auth.signInWithPassword({
+      email: authEmail,
+      password: authPassword
+    });
+
+    if (error) {
+      setMessage("Erreur de connexion : " + error.message);
+      return;
+    }
+
+    setMessage("Connexion réussie.");
+  }
+
+  setAuthPassword("");
+    }
     "Accueil",
     "Nos services",
     "Demander un service",
