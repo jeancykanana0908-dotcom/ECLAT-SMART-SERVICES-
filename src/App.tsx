@@ -19,6 +19,11 @@ export default function App() {
   const [message, setMessage] = useState("");
 const [user, setUser] = useState<any>(null);
 const [authLoading, setAuthLoading] = useState(true);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+const [authEmail, setAuthEmail] = useState("");
+const [authPassword, setAuthPassword] = useState("");
+const [authName, setAuthName] = useState("");
+const [authPhone, setAuthPhone] = useState("");
   useEffect(() => {
   supabase.auth.getSession().then(({ data }) => {
     setUser(data.session?.user ?? null);
