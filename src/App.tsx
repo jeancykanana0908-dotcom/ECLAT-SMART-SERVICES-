@@ -1,5 +1,5 @@
-
 import { useState } from "react";
+import { supabase } from "./lib/supabase";
 
 type Page =
   | "Accueil"
@@ -17,7 +17,8 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [requests, setRequests] = useState<string[]>([]);
   const [message, setMessage] = useState("");
-
+const [user, setUser] = useState<any>(null);
+const [authLoading, setAuthLoading] = useState(true);
   const [form, setForm] = useState({
     name: "",
     phone: "",
