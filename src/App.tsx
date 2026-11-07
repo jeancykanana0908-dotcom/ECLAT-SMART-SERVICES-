@@ -47,7 +47,18 @@ const [authPhone, setAuthPhone] = useState("");
   });
 
   const menu: Page[] = [
-    async function handleAuth(e: React.FormEvent<HTMLFormElement>) {
+    async function handleAuth(e: React.FormEvent<HTMLFormElement>
+                             async function handleLogout() {
+  const { error } = await supabase.auth.signOut();
+
+  if (error) {
+    setMessage("Erreur de déconnexion : " + error.message);
+    return;
+  }
+
+  setMessage("Vous êtes déconnecté.");
+  setPage("Accueil");
+  }) {
   e.preventDefault();
   setMessage("");
 
