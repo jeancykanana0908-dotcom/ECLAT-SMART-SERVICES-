@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "./lib/supabase";
 
 type Page =
@@ -19,6 +19,20 @@ export default function App() {
   const [message, setMessage] = useState("");
 const [user, setUser] = useState<any>(null);
 const [authLoading, setAuthLoading] = useState(true);
+  useEffect(() => {
+  supabase.auth.getSession().then(({ data }) => {
+    setUser(data.session?.user ?? null);
+    setAuthLoading(false);
+  });
+
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((_event, session) => {
+    setUser(session?.user ?? null);
+  });
+
+  return () => subscription.unsubscribe();
+}, []);
   const [form, setForm] = useState({
     name: "",
     phone: "",
