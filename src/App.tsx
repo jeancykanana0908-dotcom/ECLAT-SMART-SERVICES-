@@ -59,7 +59,42 @@ export default function App() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  async function authenticate(register: boolean) {
+
+async function authenticate(register: boolean) {
+  if (!supabase) {
+    setMessage("Erreur : Supabase n'est pas connecté.");
+    return;
+  }
+
+  if (!email || !password) {
+    setMessage("Veuillez remplir l'e-mail et le mot de passe.");
+    return;
+  }
+
+  setLoading(true);
+  setMessage("Connexion en cours...");
+
+  try {
+    const result = register
+      ? await supabase.auth.signUp({ email, password })
+      : await supabase.auth.signInWithPassword({ email, password });
+
+    if (result.error) {
+      setMessage("Erreur Supabase : " + result.error.message);
+    } else if (register) {
+      setMessage("Inscription effectuée. Vérifiez votre e-mail si nécessaire.");
+    } else {
+      setUser(result.data.user);
+      setMessage("Connexion réussie !");
+      setPage("Espace client");
+    }
+  } catch (error) {
+    setMessage("Erreur technique : " + String(error));
+  } finally {
+    setLoading(false);
+  }
+}
+
     if (!supabase) return;
 
     if (!email || !password) {
