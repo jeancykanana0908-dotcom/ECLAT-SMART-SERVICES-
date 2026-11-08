@@ -122,20 +122,6 @@ async function authenticate(register: boolean) {
   }
 
   async function logout() {
-    if (!supabase) return;
-
-    const { error } = await supabase.auth.signOut();
-
-    if (error) {
-      setMessage(error.message);
-    } else {
-      setUser(null);
-      setRequests([]);
-      setPage("Accueil");
-      setMessage("Déconnexion réussie.");
-    }
-  }
-
   async function loadRequests() {
     if (!supabase || !user) return;
 
