@@ -1,7 +1,24 @@
 
-import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent, type CSSProperties } from "react";
 import { supabase } from "./lib/supabase";
+
+type Page =
+  | "Accueil"
+  | "Nos services"
+  | "Créer un compte"
+  | "Connexion"
+  | "Espace client"
+  | "Demander un service"
+  | "Suivi des demandes";
+
+type ServiceRequest = {
+  id: string;
+  service_type: string;
+  description: string;
+  address: string;
+  status: string;
+  created_at: string;
+};
 
 const services = [
   "Nettoyage professionnel",
@@ -15,281 +32,472 @@ const services = [
   "Supervision et contrôle",
 ];
 
-type ServiceRequest = {
-  id: string;
-  service: string;
-  customer_type: string;
-  address: string;
-  requested_date: string | null;
-  description: string | null;
-  status: string;
+const styles: Record<string, CSSProperties> = {
+  page: {
+    minHeight: "100vh",
+    background: "#f3f6fb",
+    color: "#172b4d",
+    fontFamily: "Arial, sans-serif",
+  },
+  header: {
+    background: "#073b75",
+    color: "white",
+    padding: "18px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: "12px",
+  },
+  nav: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "8px",
+  },
+  main: {
+    maxWidth: "1000px",
+    margin: "30px auto",
+    padding: "20px",
+  },
+  card: {
+    background: "white",
+    padding: "22px",
+    borderRadius: "12px",
+    marginBottom: "16px",
+    boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
+  },
+  button: {
+    background: "#0878c9",
+    color: "white",
+    border: "none",
+    padding: "11px 16px",
+    borderRadius: "7px",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+  secondaryButton: {
+    background: "transparent",
+    color: "white",
+    border: "1px solid white",
+    padding: "9px 13px",
+    borderRadius: "7px",
+    cursor: "pointer",
+  },
+  input: {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "12px",
+    marginTop: "7px",
+    marginBottom: "15px",
+    border: "1px solid #cbd5e1",
+    borderRadius: "7px",
+    fontSize: "15px",
+  },
+  label: {
+    display: "block",
+    fontWeight: "bold",
+  },
+  message: {
+    background: "#e7f2ff",
+    color: "#073b75",
+    padding: "12px",
+    borderRadius: "7px",
+    marginBottom: "15px",
+  },
 };
 
 export default function App() {
-  const [page, setPage] = useState("Accueil");
+  const [page, setPage] = useState<Page>("Accueil");
   const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [service, setService] = useState(services[0]);
-  const [customerType, setCustomerType] = useState("Particulier");
-  const [address, setAddress] = useState("");
-  const [date, setDate] = useState("");
-  const [description, setDescription] = useState("");
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [service, setService] = useState(services[0]);
+  const [description, setDescription] = useState("");
+  const [address, setAddress] = useState("");
 
   useEffect(() => {
-    if (!supabase) {
-      setMessage("Configuration Supabase manquante.");
+    const client = supabase;
+
+    if (!client) {
+      setMessage("Connexion à Supabase impossible. Vérifiez la configuration.");
       return;
     }
 
-    supabase.auth.getSession().then(({ data, error }) => {
-      if (error) setMessage(error.message);
+    client.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
       setUser(data.session?.user ?? null);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setUser(session?.user ?? null);
-      }
-    );
+    const {
+      data: { subscription },
+    } = client.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
 
-    return () => listener.subscription.unsubscribe();
+    return () => subscription.unsubscribe();
   }, []);
 
+  const loadRequests = useCallback(async () => {
+    const client = supabase;
 
-async function authenticate(register: boolean) {
-  if (!supabase) {
-    setMessage("Erreur : Supabase n'est pas connecté.");
-    return;
-  }
+    if (!client || !user) return;
 
-  if (!email || !password) {
-    setMessage("Veuillez remplir l'e-mail et le mot de passe.");
-    return;
-  }
+    const { data, error } = await client
+      .from("service_requests")
+      .select("*")
+      .eq("client_id", user.id)
+      .order("created_at", { ascending: false });
 
-  setLoading(true);
-  setMessage("Connexion en cours...");
-
-  try {
-    const result = register
-      ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({ email, password });
-
-    if (result.error) {
-      setMessage("Erreur Supabase : " + result.error.message);
-    } else if (register) {
-      setMessage("Inscription effectuée. Vérifiez votre e-mail si nécessaire.");
-    } else {
-      setUser(result.data.user);
-      setMessage("Connexion réussie !");
-      setPage("Espace client");
+    if (error) {
+      setMessage("Erreur lors du chargement des demandes : " + error.message);
+      return;
     }
-  } catch (error) {
-    setMessage("Erreur technique : " + String(error));
-  } finally {
-    setLoading(false);
-  }
-}
 
-    if (!supabase) return;
+    setRequests((data ?? []) as ServiceRequest[]);
+  }, [user]);
 
-    if (!email || !password) {
-      setMessage("Veuillez remplir l'e-mail et le mot de passe.");
+  useEffect(() => {
+    if (user) {
+      void loadRequests();
+    } else {
+      setRequests([]);
+    }
+  }, [user, loadRequests]);
+
+  async function authenticate(register: boolean) {
+    const client = supabase;
+
+    setMessage("");
+
+    if (!client) {
+      setMessage("Supabase n'est pas correctement configuré.");
+      return;
+    }
+
+    if (!email.trim() || !password.trim()) {
+      setMessage("Veuillez saisir votre adresse e-mail et votre mot de passe.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setMessage("Le mot de passe doit contenir au moins 6 caractères.");
       return;
     }
 
     setLoading(true);
-    setMessage("");
 
-    const result = register
-      ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({ email, password });
+    try {
+      if (register) {
+        const { data, error } = await client.auth.signUp({
+          email: email.trim(),
+          password,
+        });
 
-    setLoading(false);
+        if (error) {
+          setMessage("Erreur de création du compte : " + error.message);
+        } else if (data.session) {
+          setUser(data.session.user);
+          setMessage("Votre compte a été créé avec succès.");
+          setPage("Espace client");
+        } else {
+          setMessage(
+            "Votre inscription est enregistrée. Vérifiez votre boîte e-mail pour confirmer votre compte."
+          );
+        }
+      } else {
+        const { data, error } = await client.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
 
-    if (result.error) {
-      setMessage(result.error.message);
-    } else if (register) {
-      setMessage("Inscription effectuée. Vérifiez votre e-mail si nécessaire.");
-    } else {
-      setMessage("Connexion réussie.");
-      setPage("Espace client");
+        if (error) {
+          setMessage("Erreur de connexion : " + error.message);
+        } else {
+          setUser(data.user);
+          setMessage("Connexion réussie.");
+          setPage("Espace client");
+        }
+      }
+    } catch (error) {
+      setMessage("Erreur technique : " + String(error));
+    } finally {
+      setLoading(false);
     }
   }
 
   async function logout() {
-  async function loadRequests() {
-    if (!supabase || !user) return;
+    const client = supabase;
 
-    setLoading(true);
+    if (!client) return;
 
-    const { data, error } = await supabase
-      .from("service_requests")
-      .select("id, service, customer_type, address, requested_date, description, status")
-      .eq("client_id", user.id)
-      .order("created_at", { ascending: false });
-
-    setLoading(false);
+    const { error } = await client.auth.signOut();
 
     if (error) {
-      setMessage("Erreur de chargement : " + error.message);
-    } else {
-      setRequests(data || []);
+      setMessage("Erreur de déconnexion : " + error.message);
+      return;
     }
-  }
 
-  useEffect(() => {
-    if (user) loadRequests();
-  }, [user]);
+    setUser(null);
+    setPage("Accueil");
+    setMessage("Vous êtes déconnecté.");
+  }
 
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!supabase || !user) {
-      setMessage("Connectez-vous avant de demander un service.");
+    const client = supabase;
+
+    if (!client || !user) {
+      setMessage("Vous devez être connecté pour envoyer une demande.");
+      return;
+    }
+
+    if (!description.trim() || !address.trim()) {
+      setMessage("Veuillez remplir la description et l'adresse.");
       return;
     }
 
     setLoading(true);
     setMessage("");
 
-    const { error } = await supabase.from("service_requests").insert({
+    const { error } = await client.from("service_requests").insert({
       client_id: user.id,
-      service,
-      customer_type: customerType,
-      address,
-      requested_date: date || null,
-      description,
+      service_type: service,
+      description: description.trim(),
+      address: address.trim(),
       status: "En attente",
     });
 
     setLoading(false);
 
     if (error) {
-      setMessage("Erreur : " + error.message);
-    } else {
-      setMessage("Votre demande a été enregistrée.");
-      setAddress("");
-      setDate("");
-      setDescription("");
-      setPage("Suivi des demandes");
-      await loadRequests();
+      setMessage("Impossible d'envoyer la demande : " + error.message);
+      return;
     }
+
+    setDescription("");
+    setAddress("");
+    setMessage("Votre demande a été envoyée avec succès.");
+    setPage("Suivi des demandes");
+    await loadRequests();
   }
 
-  const button = {
-    background: "#07569b",
-    color: "white",
-    padding: "12px 18px",
-    border: "none",
-    borderRadius: "6px",
-    margin: "5px",
-    cursor: "pointer",
-  } as const;
-
-  const field = {
-    width: "100%",
-    padding: "12px",
-    margin: "8px 0 16px",
-    border: "1px solid #ccc",
-    borderRadius: "6px",
-  } as const;
+  function goTo(nextPage: Page) {
+    setMessage("");
+    setPage(nextPage);
+  }
 
   return (
-    <div style={{ fontFamily: "Arial, sans-serif", color: "#263445" }}>
-      <header style={{ background: "#07569b", color: "white", padding: "30px 15px", textAlign: "center" }}>
-        <h1>ÉCLAT SMART SERVICE</h1>
-        <p>Nettoyage professionnel & Buanderie</p>
-        <p>Qualité - Rapidité - Fiabilité - Satisfaction client</p>
+    <div style={styles.page}>
+      <header style={styles.header}>
+        <div>
+          <h2 style={{ margin: 0 }}>ÉCLAT SMART SERVICE</h2>
+          <small>Nettoyage professionnel – Buanderie – Services techniques</small>
+        </div>
+
+        <nav style={styles.nav}>
+          <button style={styles.secondaryButton} onClick={() => goTo("Accueil")}>
+            Accueil
+          </button>
+          <button style={styles.secondaryButton} onClick={() => goTo("Nos services")}>
+            Nos services
+          </button>
+
+          {user ? (
+            <>
+              <button style={styles.secondaryButton} onClick={() => goTo("Espace client")}>
+                Mon espace
+              </button>
+              <button style={styles.secondaryButton} onClick={() => void logout()}>
+                Déconnexion
+              </button>
+            </>
+          ) : (
+            <>
+              <button style={styles.secondaryButton} onClick={() => goTo("Connexion")}>
+                Connexion
+              </button>
+              <button style={styles.secondaryButton} onClick={() => goTo("Créer un compte")}>
+                Créer un compte
+              </button>
+            </>
+          )}
+        </nav>
       </header>
 
-      <nav style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", padding: "12px", background: "#eaf1f8" }}>
-        {["Accueil", "Nos services", "Demander un service", "Suivi des demandes", "Espace client"].map(item => (
-          <button key={item} style={button} onClick={() => { setMessage(""); setPage(item); }}>
-            {item}
-          </button>
-        ))}
-      </nav>
-
-      <main style={{ maxWidth: "950px", margin: "auto", padding: "25px 18px", minHeight: "400px" }}>
-        {message && (
-          <div style={{ padding: "12px", marginBottom: "15px", background: "#eaf1f8", borderRadius: "6px" }}>
-            {message}
-          </div>
-        )}
+      <main style={styles.main}>
+        {message && <div style={styles.message}>{message}</div>}
 
         {page === "Accueil" && (
-          <section>
-            <h2>Bienvenue chez ÉCLAT SMART SERVICE</h2>
-            <p>Votre partenaire pour le nettoyage professionnel, la buanderie et les services techniques.</p>
-            <p>Nous accompagnons les particuliers, entreprises et institutions à Kinshasa.</p>
-            <button style={button} onClick={() => setPage("Nos services")}>Découvrir nos services</button>
-            <button style={button} onClick={() => setPage("Demander un service")}>Demander une intervention</button>
+          <section style={styles.card}>
+            <h1>Bienvenue chez ÉCLAT SMART SERVICE</h1>
+            <p>
+              Une plateforme pour accéder à des services professionnels de
+              nettoyage, de buanderie, de maintenance et de gestion des déchets.
+            </p>
+            <button style={styles.button} onClick={() => goTo("Nos services")}>
+              Découvrir nos services
+            </button>
           </section>
         )}
 
         {page === "Nos services" && (
           <section>
-            <h2>Nos services</h2>
-            {services.map(item => (
-              <div key={item} style={{ padding: "14px", margin: "10px 0", background: "#f1f5f9", borderRadius: "6px" }}>
-                {item}
+            <h1>Nos services</h1>
+            {services.map((item) => (
+              <div key={item} style={styles.card}>
+                <h3>{item}</h3>
+                <button
+                  style={styles.button}
+                  onClick={() => {
+                    setService(item);
+                    goTo(user ? "Demander un service" : "Connexion");
+                  }}
+                >
+                  Demander ce service
+                </button>
               </div>
             ))}
           </section>
         )}
 
+        {(page === "Créer un compte" || page === "Connexion") && (
+          <section style={styles.card}>
+            <h1>{page}</h1>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void authenticate(page === "Créer un compte");
+              }}
+            >
+              <label style={styles.label}>Adresse e-mail</label>
+              <input
+                style={styles.input}
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="Votre adresse e-mail"
+                required
+              />
+
+              <label style={styles.label}>Mot de passe</label>
+              <input
+                style={styles.input}
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Au moins 6 caractères"
+                minLength={6}
+                required
+              />
+
+              <button style={styles.button} type="submit" disabled={loading}>
+                {loading
+                  ? "Veuillez patienter..."
+                  : page === "Créer un compte"
+                    ? "Créer mon compte"
+                    : "Me connecter"}
+              </button>
+            </form>
+
+            <p>
+              {page === "Créer un compte" ? "Vous avez déjà un compte ?" : "Vous n'avez pas encore de compte ?"}
+            </p>
+
+            <button
+              style={styles.button}
+              onClick={() =>
+                goTo(page === "Créer un compte" ? "Connexion" : "Créer un compte")
+              }
+            >
+              {page === "Créer un compte" ? "Se connecter" : "Créer un compte"}
+            </button>
+          </section>
+        )}
+
         {page === "Espace client" && (
-          <section>
-            <h2>Espace client</h2>
+          <section style={styles.card}>
+            <h1>Espace client</h1>
             {user ? (
               <>
-                <p>Connecté avec : {user.email}</p>
-                <button style={button} onClick={() => setPage("Demander un service")}>Nouvelle demande</button>
-                <button style={button} onClick={() => setPage("Suivi des demandes")}>Mes demandes</button>
-                <button style={button} onClick={logout}>Déconnexion</button>
+                <p>Vous êtes connecté avec : {user.email}</p>
+                <button
+                  style={styles.button}
+                  onClick={() => goTo("Demander un service")}
+                >
+                  Faire une demande
+                </button>
+                <button
+                  style={{ ...styles.button, marginLeft: "8px" }}
+                  onClick={() => goTo("Suivi des demandes")}
+                >
+                  Suivre mes demandes
+                </button>
               </>
             ) : (
-              <form onSubmit={event => { event.preventDefault(); authenticate(false); }}>
-                <label>Adresse e-mail</label>
-                <input style={field} type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-                <label>Mot de passe</label>
-                <input style={field} type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-                <button style={button} disabled={loading}>Se connecter</button>
-                <button type="button" style={button} disabled={loading} onClick={() => authenticate(true)}>Créer un compte</button>
-              </form>
+              <>
+                <p>Connectez-vous pour accéder à votre espace client.</p>
+                <button style={styles.button} onClick={() => goTo("Connexion")}>
+                  Se connecter
+                </button>
+              </>
             )}
           </section>
         )}
 
         {page === "Demander un service" && (
-          <section>
-            <h2>Demander un service</h2>
+          <section style={styles.card}>
+            <h1>Demander un service</h1>
+
             {!user ? (
-              <p>Connectez-vous dans votre espace client pour envoyer une demande.</p>
+              <>
+                <p>Vous devez vous connecter avant de faire une demande.</p>
+                <button style={styles.button} onClick={() => goTo("Connexion")}>
+                  Se connecter
+                </button>
+              </>
             ) : (
               <form onSubmit={submitRequest}>
-                <label>Service demandé</label>
-                <select style={field} value={service} onChange={e => setService(e.target.value)}>
-                  {services.map(item => <option key={item}>{item}</option>)}
+                <label style={styles.label}>Service souhaité</label>
+                <select
+                  style={styles.input}
+                  value={service}
+                  onChange={(event) => setService(event.target.value)}
+                >
+                  {services.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
                 </select>
-                <label>Type de client</label>
-                <select style={field} value={customerType} onChange={e => setCustomerType(e.target.value)}>
-                  <option>Particulier</option>
-                  <option>Entreprise</option>
-                  <option>Institution</option>
-                </select>
-                <label>Adresse de l'intervention</label>
-                <input style={field} value={address} onChange={e => setAddress(e.target.value)} required placeholder="Adresse à Kinshasa" />
-                <label>Date souhaitée</label>
-                <input style={field} type="date" value={date} onChange={e => setDate(e.target.value)} />
-                <label>Description</label>
-                <textarea style={field} rows={4} value={description} onChange={e => setDescription(e.target.value)} />
-                <button style={button} disabled={loading}>Envoyer ma demande</button>
+
+                <label style={styles.label}>Adresse d'intervention</label>
+                <input
+                  style={styles.input}
+                  value={address}
+                  onChange={(event) => setAddress(event.target.value)}
+                  placeholder="Commune, quartier, avenue..."
+                  required
+                />
+
+                <label style={styles.label}>Description de votre besoin</label>
+                <textarea
+                  style={{ ...styles.input, minHeight: "110px" }}
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="Décrivez le service dont vous avez besoin..."
+                  required
+                />
+
+                <button style={styles.button} type="submit" disabled={loading}>
+                  {loading ? "Envoi en cours..." : "Envoyer ma demande"}
+                </button>
               </form>
             )}
           </section>
@@ -297,35 +505,53 @@ async function authenticate(register: boolean) {
 
         {page === "Suivi des demandes" && (
           <section>
-            <h2>Suivi de mes demandes</h2>
+            <h1>Suivi de mes demandes</h1>
+
             {!user ? (
-              <p>Connectez-vous pour consulter vos demandes.</p>
+              <div style={styles.card}>
+                <p>Connectez-vous pour consulter vos demandes.</p>
+                <button style={styles.button} onClick={() => goTo("Connexion")}>
+                  Se connecter
+                </button>
+              </div>
+            ) : requests.length === 0 ? (
+              <div style={styles.card}>
+                <p>Vous n'avez pas encore de demande enregistrée.</p>
+                <button
+                  style={styles.button}
+                  onClick={() => goTo("Demander un service")}
+                >
+                  Faire une demande
+                </button>
+              </div>
             ) : (
-              <>
-                <button style={button} onClick={loadRequests} disabled={loading}>Actualiser</button>
-                {requests.length === 0 ? (
-                  <p>Aucune demande enregistrée.</p>
-                ) : requests.map(request => (
-                  <article key={request.id} style={{ padding: "15px", margin: "12px 0", border: "1px solid #ddd", borderRadius: "7px" }}>
-                    <h3>{request.service}</h3>
-                    <p>Adresse : {request.address}</p>
-                    <p>Client : {request.customer_type}</p>
-                    <p>Date : {request.requested_date || "Non définie"}</p>
-                    <p>Description : {request.description || "Aucune"}</p>
-                    <strong>Statut : {request.status}</strong>
-                  </article>
-                ))}
-              </>
+              requests.map((request) => (
+                <div key={request.id} style={styles.card}>
+                  <h3>{request.service_type}</h3>
+                  <p><strong>Description :</strong> {request.description}</p>
+                  <p><strong>Adresse :</strong> {request.address}</p>
+                  <p><strong>Statut :</strong> {request.status}</p>
+                  <small>
+                    {request.created_at
+                      ? new Date(request.created_at).toLocaleString("fr-FR")
+                      : ""}
+                  </small>
+                </div>
+              ))
             )}
           </section>
         )}
       </main>
 
-      <footer style={{ background: "#12334f", color: "white", padding: "25px", textAlign: "center" }}>
-        <h3>ÉCLAT SMART SERVICE</h3>
-        <p>Nettoyage professionnel & Buanderie</p>
-        <p>Kinshasa - République démocratique du Congo</p>
-        <p>© 2026 ÉCLAT SMART SERVICE</p>
+      <footer
+        style={{
+          background: "#073b75",
+          color: "white",
+          textAlign: "center",
+          padding: "20px",
+        }}
+      >
+        © {new Date().getFullYear()} ÉCLAT SMART SERVICE — Tous droits réservés.
       </footer>
     </div>
   );
